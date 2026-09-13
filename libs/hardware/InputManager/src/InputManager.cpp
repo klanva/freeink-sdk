@@ -2122,12 +2122,43 @@ void InputManager::pollGt911(const unsigned long now) {
   if (gt911Addr == 0) {
     return;
   }
+  static uint8_t s_consecutiveFailures = 0;
   uint8_t status = 0;
   if (!gt911ReadReg(0x814E, &status, 1)) {
+    s_consecutiveFailures++;
+    if (s_consecutiveFailures >= 5) {
+      s_consecutiveFailures = 0;
+      const auto& t = BoardConfig::ACTIVE.touch;
+      // 9 SCL bus-clear pulses
+      if (t.scl >= 0) {
+        pinMode(t.scl, OUTPUT);
+        for (int i = 0; i < 9; ++i) {
+          digitalWrite(t.scl, HIGH);
+          delayMicroseconds(5);
+          digitalWrite(t.scl, LOW);
+          delayMicroseconds(5);
+        }
+        digitalWrite(t.scl, HIGH);
+      }
+      // Re-init Wire
+      if (t.sda >= 0 && t.scl >= 0) {
+        Wire.begin(t.sda, t.scl, 400000);
+        Wire.setTimeOut(10);
+      }
+      // Hardware reset pulse RST low for 10ms
+      if (t.reset >= 0) {
+        pinMode(t.reset, OUTPUT);
+        digitalWrite(t.reset, LOW);
+        delay(10);
+        digitalWrite(t.reset, HIGH);
+        delay(10);
+      }
+    }
     // Clear status on I2C read failure so GT911 does not remain stuck
     gt911ClearStatus();
     return;
   }
+  s_consecutiveFailures = 0;
 
   // Capacitive home key long-press (status bit 0x10). Fire from the LATCHED
   // down-state + wall clock, BEFORE the buffer-ready gate below: a motionless
