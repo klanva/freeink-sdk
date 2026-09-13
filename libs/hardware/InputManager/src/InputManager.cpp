@@ -1264,6 +1264,8 @@ uint8_t InputManager::serviceTouch() {
     touchSuppressed = false;
     touchLongPressFired = false;
     resetMultiTouchGesture();
+  } else if (touchSuppressed && (now - touchDownPoint.timestamp > 1000)) {
+    touchSuppressed = false;
   }
 
   if (t.controller == BoardConfig::TouchController::Gt911) {
@@ -2122,11 +2124,8 @@ void InputManager::pollGt911(const unsigned long now) {
   }
   uint8_t status = 0;
   if (!gt911ReadReg(0x814E, &status, 1)) {
-    // Keep the last complete frame while the single-touch state remains
-    // latched. Clearing only this snapshot makes a transient I2C failure look
-    // like a multi-contact release to multi-touch consumers, which can split one
-    // physical gesture into two. A confirmed zero-contact frame below clears
-    // the snapshot together with the rest of the touch state.
+    // Clear status on I2C read failure so GT911 does not remain stuck
+    gt911ClearStatus();
     return;
   }
 

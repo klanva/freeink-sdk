@@ -664,7 +664,7 @@ void FreeInkDisplay::displayAsyncImpl(RefreshMode mode, bool turnOffScreen, bool
     return;
   }
   if (_asyncShadow == nullptr) {
-    _asyncShadow = static_cast<uint8_t*>(malloc(bufferSize));
+    _asyncShadow = allocFrameBufferStorage();
     _shadowValid = false;
   }
   if (_asyncShadow == nullptr) {  // allocation failed: blocking fallback
