@@ -1776,7 +1776,42 @@ void InputManager::pollGslx680(const unsigned long now) {
   }
 }
 
-// --- GT911 (LilyGo) ---------------------------------------------------------
+// --- GT911 (LilyGo / Xteink X4 Pro) ----------------------------------------
+#include <freertos/FreeRTOS.h>
+#include <freertos/semphr.h>
+
+static SemaphoreHandle_t s_i2cBusMutex = nullptr;
+
+extern "C" SemaphoreHandle_t getSharedI2cBusMutex() {
+  if (s_i2cBusMutex == nullptr) {
+    s_i2cBusMutex = xSemaphoreCreateRecursiveMutex();
+    assert(s_i2cBusMutex != nullptr);
+  }
+  return s_i2cBusMutex;
+}
+
+namespace {
+class ScopedI2CBusLock {
+  bool _locked = false;
+ public:
+  ScopedI2CBusLock() {
+    SemaphoreHandle_t m = getSharedI2cBusMutex();
+    if (m != nullptr) {
+      xSemaphoreTakeRecursive(m, portMAX_DELAY);
+      _locked = true;
+    }
+  }
+  ~ScopedI2CBusLock() {
+    if (_locked) {
+      SemaphoreHandle_t m = getSharedI2cBusMutex();
+      if (m != nullptr) {
+        xSemaphoreGiveRecursive(m);
+      }
+      _locked = false;
+    }
+  }
+};
+}  // namespace
 
 void InputManager::beginGt911() {
   const auto& t = BoardConfig::ACTIVE.touch;
@@ -1850,6 +1885,7 @@ void InputManager::beginGt911() {
 }
 
 bool InputManager::gt911ReadReg(const uint16_t reg, uint8_t* buf, const uint8_t len) {
+  ScopedI2CBusLock lock;
   Wire.beginTransmission(gt911Addr);
   Wire.write(static_cast<uint8_t>(reg >> 8));
   Wire.write(static_cast<uint8_t>(reg & 0xFF));
@@ -1868,6 +1904,7 @@ bool InputManager::gt911ReadReg(const uint16_t reg, uint8_t* buf, const uint8_t 
 }
 
 void InputManager::gt911ClearStatus() {
+  ScopedI2CBusLock lock;
   Wire.beginTransmission(gt911Addr);
   Wire.write(0x81);
   Wire.write(0x4E);
@@ -2129,8 +2166,9 @@ void InputManager::pollGt911(const unsigned long now) {
     if (s_consecutiveFailures >= 5) {
       s_consecutiveFailures = 0;
       const auto& t = BoardConfig::ACTIVE.touch;
-      // 9 SCL bus-clear pulses
+      // 9 SCL bus-clear pulses followed by valid I2C STOP condition
       if (t.scl >= 0) {
+        ScopedI2CBusLock lock;
         pinMode(t.scl, OUTPUT);
         for (int i = 0; i < 9; ++i) {
           digitalWrite(t.scl, HIGH);
@@ -2139,9 +2177,22 @@ void InputManager::pollGt911(const unsigned long now) {
           delayMicroseconds(5);
         }
         digitalWrite(t.scl, HIGH);
+        delayMicroseconds(5);
+        // Valid I2C STOP condition: drive SDA LOW, drive SCL HIGH, delay, release SDA HIGH
+        if (t.sda >= 0) {
+          pinMode(t.sda, OUTPUT);
+          digitalWrite(t.sda, LOW);
+          delayMicroseconds(5);
+          digitalWrite(t.scl, HIGH);
+          delayMicroseconds(5);
+          digitalWrite(t.sda, HIGH);
+          pinMode(t.sda, INPUT_PULLUP);
+          delayMicroseconds(5);
+        }
       }
       // Re-init Wire
       if (t.sda >= 0 && t.scl >= 0) {
+        ScopedI2CBusLock lock;
         Wire.begin(t.sda, t.scl, 400000);
         Wire.setTimeOut(10);
       }
@@ -2154,8 +2205,7 @@ void InputManager::pollGt911(const unsigned long now) {
         delay(10);
       }
     }
-    // Clear status on I2C read failure so GT911 does not remain stuck
-    gt911ClearStatus();
+    // Do NOT call gt911ClearStatus() on I2C read failure to avoid write transactions during bus stall
     return;
   }
   s_consecutiveFailures = 0;

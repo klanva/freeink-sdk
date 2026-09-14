@@ -44,19 +44,49 @@ bool PowerManager::armPowerButtonWakeup() {
 
   // Hold the idle level with the opposite pull so the line is defined in sleep.
   pinMode(pin, activeHigh ? INPUT_PULLDOWN : INPUT_PULLUP);
-  armWakeOnPins(1ULL << pin, /*wakeLow=*/!activeHigh);
+
+  uint64_t wakeMask = 1ULL << pin;
+  // On X4 Pro, arm GPIO 0, 7, and 3 for deep sleep wakeup via EXT1
+  if (BoardConfig::isX4Pro()) {
+    const auto& input = BoardConfig::ACTIVE.input;
+    if (input.up >= 0) {
+      pinMode(input.up, INPUT_PULLUP);
+      wakeMask |= (1ULL << input.up);
+    }
+    if (input.down >= 0) {
+      pinMode(input.down, INPUT_PULLUP);
+      wakeMask |= (1ULL << input.down);
+    }
+  }
+
+  armWakeOnPins(wakeMask, /*wakeLow=*/!activeHigh);
   return true;
 }
 
 void PowerManager::waitForPowerButtonRelease() {
   const int8_t pin = powerPin();
-  if (pin < 0) return;
-  const bool activeHigh = powerActiveHigh();
-
-  pinMode(pin, activeHigh ? INPUT_PULLDOWN : INPUT_PULLUP);
-  const int pressedLevel = activeHigh ? HIGH : LOW;
-  while (digitalRead(pin) == pressedLevel) {
-    delay(50);
+  if (pin >= 0) {
+    const bool activeHigh = powerActiveHigh();
+    pinMode(pin, activeHigh ? INPUT_PULLDOWN : INPUT_PULLUP);
+    const int pressedLevel = activeHigh ? HIGH : LOW;
+    while (digitalRead(pin) == pressedLevel) {
+      delay(50);
+    }
+  }
+  if (BoardConfig::isX4Pro()) {
+    const auto& input = BoardConfig::ACTIVE.input;
+    if (input.up >= 0) {
+      pinMode(input.up, INPUT_PULLUP);
+      while (digitalRead(input.up) == LOW) {
+        delay(50);
+      }
+    }
+    if (input.down >= 0) {
+      pinMode(input.down, INPUT_PULLUP);
+      while (digitalRead(input.down) == LOW) {
+        delay(50);
+      }
+    }
   }
 }
 
