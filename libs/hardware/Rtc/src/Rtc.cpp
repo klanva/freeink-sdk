@@ -6,6 +6,7 @@
 
 #if FREEINK_CAP_RTC
 
+#include <ScopedI2CBusLock.h>
 #include <Wire.h>
 #include <soc/soc_caps.h>
 
@@ -67,6 +68,7 @@ uint8_t bcdToDec(uint8_t v) { return static_cast<uint8_t>((v >> 4) * 10U + (v & 
 uint8_t decToBcd(uint8_t v) { return static_cast<uint8_t>((v / 10U) << 4 | (v % 10U)); }
 
 bool writeReg(uint8_t addr, uint8_t reg, uint8_t value) {
+  ScopedI2CBusLock lock;
   ensureWire();
   auto& wire = sensorWire();
   wire.beginTransmission(addr);
@@ -76,6 +78,7 @@ bool writeReg(uint8_t addr, uint8_t reg, uint8_t value) {
 }
 
 bool readRegs(uint8_t addr, uint8_t reg, uint8_t* dst, uint8_t len) {
+  ScopedI2CBusLock lock;
   ensureWire();
   auto& wire = sensorWire();
   wire.beginTransmission(addr);
@@ -122,6 +125,7 @@ bool Rtc::begin() {
 bool Rtc::now(DateTime& out) {
   const uint8_t addr = BoardConfig::ACTIVE.sensors.rtcAddr;
   if (!begun_ || addr == 0) return false;
+  ScopedI2CBusLock lock;
   const auto& s = BoardConfig::ACTIVE.sensors;
   uint8_t raw[7] = {};
   switch (s.rtcType) {
@@ -196,6 +200,7 @@ bool Rtc::now(DateTime& out) {
 bool Rtc::set(const DateTime& dt) {
   const uint8_t addr = BoardConfig::ACTIVE.sensors.rtcAddr;
   if (!begun_ || addr == 0) return false;
+  ScopedI2CBusLock lock;
   const auto& s = BoardConfig::ACTIVE.sensors;
   const uint8_t centuryBit = dt.year < 2000 ? 0x80U : 0x00U;
   ensureWire();

@@ -43,6 +43,12 @@ constexpr uint32_t perceptualDuty(uint32_t pct, uint32_t full) {
   if (pct == 0) return 0;
   if (pct > 100) pct = 100;
   const uint32_t duty = (full * GAMMA_TABLE[pct] + 32767u) / 65535u;
+  // 10-bit perceptual curve (BookPoint v2.2.4 / CrossDiTo):
+  // Ensure minimum total duty at 1% setting is >= 2 LSB on 10-bit PWM (0.195% >= 0.10% duty),
+  // preventing channel extinction in mixed color balance and providing pitch-black readability.
+  if (full >= 1023u && duty < 2u) {
+    return 2u;
+  }
   return duty ? duty : 1u;
 }
 
@@ -325,9 +331,22 @@ void FrontlightManager::apply() {
   }
   uint32_t warmDuty = 0;
   uint32_t coolDuty = totalDuty;
-  if (dual) {
-    warmDuty = (totalDuty * _warmPercent + 50u) / 100u;
-    coolDuty = totalDuty - warmDuty;
+  if (dual && totalDuty > 0) {
+    if (_warmPercent == 0) {
+      warmDuty = 0;
+      coolDuty = totalDuty;
+    } else if (_warmPercent == 100) {
+      warmDuty = totalDuty;
+      coolDuty = 0;
+    } else {
+      // Mixed color balance: clamp so neither LED completely extinguishes if totalDuty >= 2
+      warmDuty = (totalDuty * _warmPercent + 50u) / 100u;
+      if (totalDuty >= 2u) {
+        if (warmDuty == 0) warmDuty = 1u;
+        if (warmDuty >= totalDuty) warmDuty = totalDuty - 1u;
+      }
+      coolDuty = totalDuty - warmDuty;
+    }
   }
 #ifdef FREEINK_FRONTLIGHT_LS
   updateLsKeepAlive(totalDuty != 0);

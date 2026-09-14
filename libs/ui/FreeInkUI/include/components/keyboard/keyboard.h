@@ -544,6 +544,7 @@ void keyboard(Frame<MaxInteractions>& frame, Rect rect, const KeyboardProps& pro
     bp.minTouchSize = props.minTouchSize;
     bp.hitPadding.bottom = rowHitOverflow;
     bp.radius = props.keyRadius;
+    if (key.kind == KeyKind::Space) bp.hitPadding.left = 0;
     bp.enabled = key.enabled && key.kind != KeyKind::Disabled;
     button(frame, keyRect, bp);
 

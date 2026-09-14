@@ -12,6 +12,7 @@
 #include <cmath>
 
 #if FREEINK_BATTERY_I2C_GAUGE
+#include <ScopedI2CBusLock.h>
 #include <Wire.h>
 #if FREEINK_DEVICE_WS397
 #include <Axp2101.h>
@@ -46,6 +47,7 @@ void ensureWire() {
 
 bool readReg16(uint8_t addr, uint8_t reg, uint16_t& out) {
   if (addr == 0) return false;
+  ScopedI2CBusLock lock;
   ensureWire();
   TwoWire& w = gaugeWire();
   w.beginTransmission(addr);
@@ -60,6 +62,7 @@ bool readReg16(uint8_t addr, uint8_t reg, uint16_t& out) {
 
 bool readReg8(uint8_t addr, uint8_t reg, uint8_t& out) {
   if (addr == 0) return false;
+  ScopedI2CBusLock lock;
   ensureWire();
   TwoWire& w = gaugeWire();
   w.beginTransmission(addr);
@@ -72,6 +75,7 @@ bool readReg8(uint8_t addr, uint8_t reg, uint8_t& out) {
 
 bool writeReg8(uint8_t addr, uint8_t reg, uint8_t val) {
   if (addr == 0) return false;
+  ScopedI2CBusLock lock;
   ensureWire();
   TwoWire& w = gaugeWire();
   w.beginTransmission(addr);
@@ -111,6 +115,7 @@ bool cw2017VersionIsRunning(const uint8_t version) { return (version & 0xFD) == 
 
 // Soft-reset: MODE 0xF0 -> 0x30 -> 0x00, 20 ms apart (OEM FUN_4215042c).
 bool cw2017Reset(const uint8_t addr) {
+  ScopedI2CBusLock lock;
   if (!writeReg8(addr, CW2017_REG_MODE, CW2017_MODE_DEFAULT)) return false;
   delay(20);
   if (!writeReg8(addr, CW2017_REG_MODE, CW2017_MODE_RESTART)) return false;
@@ -172,6 +177,7 @@ bool cw2017ProfileMatches(const uint8_t addr, bool& matches) {
 // first attempt. This matters on the X4 Pro because the gauge shares Wire with
 // the GT911 and an early transient I2C error is otherwise easy to cache forever.
 bool cw2017EnsureProfile(const uint8_t addr) {
+  ScopedI2CBusLock lock;
   uint8_t mode = 0;
   uint8_t version = 0;
   if (!readReg8(addr, CW2017_REG_MODE, mode)) return false;

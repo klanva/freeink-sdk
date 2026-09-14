@@ -488,8 +488,8 @@ static const KeyboardKey HE_ROW3[] = {K("ז", "ז", 0x5D6), K("ס", "ס", 0x5E1)
 // The key draws a globe glyph, so it carries no label, and one unit is all a
 // glyph needs; the rest of the row's ten units go to the space bar.
 static const KeyboardKey LANG_ROW4[] = {KS("?123", KeyKind::Mode, QWERTY_KEY_MODE, 2),
-                                        KS(nullptr, KeyKind::Lang, QWERTY_KEY_LANG, 1),
-                                        KS("Space", KeyKind::Space, QWERTY_KEY_SPACE, 5),
+                                        KS(nullptr, KeyKind::Lang, QWERTY_KEY_LANG, 2),
+                                        KS("Space", KeyKind::Space, QWERTY_KEY_SPACE, 4),
                                         KS("OK", KeyKind::Ok, QWERTY_KEY_ENTER, 2)};
 
 static const KeyboardRow EN_ROWS[] = {{EN_ROW1, 10, 0}, {EN_ROW2, 9, 1}, {EN_ROW3, 9, 0}, {EN_ROW4, 3, 0}};

@@ -304,6 +304,7 @@ enum InputMask : uint16_t {
   // held, routing dispatches every frame with ActionEvent::dragPermille set to
   // the horizontal position within the element's rect (sliders, scrubbers).
   InputDrag = 1 << 9,
+  InputRelease = 1 << 10,
   InputDefault = InputTouch | InputFocus | InputConfirm,
 };
 
@@ -1190,22 +1191,34 @@ private:
 
   int16_t findTouch(uint8_t slot, int16_t x, int16_t y, InputMask kind) const {
     const Interaction *interactions = interactions_[slot];
+    int16_t match = -1;
     for (int16_t i = static_cast<int16_t>(count_[slot]) - 1; i >= 0; --i) {
       const Interaction &interaction = interactions[i];
       if (hasState(interaction.state, StateDisabled))
         continue;
       const bool acceptsKind = acceptsInput(interaction.inputMask, kind);
-      // InputTouch is the catch-all for tap-style kinds; long-press and drag
+      // InputTouch and InputRelease are catch-alls for tap-style kinds; long-press and drag
       // are opt-in, so a plain button never absorbs them.
       const bool acceptsTouchFallback =
           kind != InputLongPress && kind != InputDrag &&
-          acceptsInput(interaction.inputMask, InputTouch);
+          (acceptsInput(interaction.inputMask, InputTouch) ||
+           acceptsInput(interaction.inputMask, InputRelease));
       if (!acceptsKind && !acceptsTouchFallback)
         continue;
-      if (interaction.rect.contains(x, y))
-        return i;
+      if (interaction.rect.contains(x, y)) {
+        // High-priority arbitration: Lang key (-4) takes precedence over Space bar (32) on boundary/overlap taps
+        if (interaction.value == -4 /* QWERTY_KEY_LANG */) {
+          return i;
+        }
+        if (match < 0) {
+          match = i;
+          if (interaction.value != 32 /* QWERTY_KEY_SPACE */) {
+            return i;
+          }
+        }
+      }
     }
-    return -1;
+    return match;
   }
 
   int16_t findFirst(uint8_t slot, InputMask kind) const {
@@ -1312,9 +1325,19 @@ private:
         }
       }
       lastDragX_ = -1;
-      const int16_t idx =
+      int16_t idx =
           findTouch(slot, input.touchX, input.touchY,
-                    input.longPress ? InputLongPress : InputTouch);
+                    input.longPress ? InputLongPress : static_cast<InputMask>(InputTouch | InputRelease));
+      // Finger roll / centroid drift fallback: if release coordinates drifted to (-1, -1)
+      // or outside bounds, check whether the press was bound to an active touch/release interaction.
+      if (idx < 0 && active_ >= 0 && active_ < static_cast<int16_t>(slotCount)) {
+        const Interaction &held = interactions_[slot][active_];
+        if (!hasState(held.state, StateDisabled) &&
+            (acceptsInput(held.inputMask, InputTouch) ||
+             acceptsInput(held.inputMask, InputRelease))) {
+          idx = active_;
+        }
+      }
       active_ = -1;
       if (idx >= 0) {
         ActionEvent released = eventFor(slot, idx);

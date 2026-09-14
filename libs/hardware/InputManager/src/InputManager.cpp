@@ -732,11 +732,10 @@ unsigned long InputManager::lastTouchHeldMs() const {
 
 bool InputManager::wasTouchActivity() const {
 #if FREEINK_CAP_TOUCH
-  const bool screenActivity = touchPressedEvent || touchReleasedEvent;
-  const bool homeKeyActivity = touchHomeKeyEvent || touchHomeKeyTapEvent || touchHomeKeyLongEvent;
-  // A held screen contact already owns this activity lifecycle. Do not let a
-  // simultaneous Home-key edge retire screen-contact suppression early.
-  return screenActivity || (!touchPressed && homeKeyActivity);
+  const bool touchContactActive = touchPressed || (trackedTouchContactCount > 0);
+  const bool screenActivity = touchContactActive || touchPressedEvent || touchReleasedEvent;
+  const bool homeKeyActivity = touchHomeKeyDown || touchHomeKeyEvent || touchHomeKeyTapEvent || touchHomeKeyLongEvent;
+  return screenActivity || homeKeyActivity;
 #else
   return false;
 #endif
@@ -1778,40 +1777,17 @@ void InputManager::pollGslx680(const unsigned long now) {
 
 // --- GT911 (LilyGo / Xteink X4 Pro) ----------------------------------------
 #include <freertos/FreeRTOS.h>
-#include <freertos/semphr.h>
-
-static SemaphoreHandle_t s_i2cBusMutex = nullptr;
+#include <ScopedI2CBusLock.h>
 
 extern "C" SemaphoreHandle_t getSharedI2cBusMutex() {
-  if (s_i2cBusMutex == nullptr) {
-    s_i2cBusMutex = xSemaphoreCreateRecursiveMutex();
-    assert(s_i2cBusMutex != nullptr);
-  }
+#if configSUPPORT_STATIC_ALLOCATION
+  static StaticSemaphore_t s_mutexBuffer;
+  static SemaphoreHandle_t s_i2cBusMutex = xSemaphoreCreateRecursiveMutexStatic(&s_mutexBuffer);
+#else
+  static SemaphoreHandle_t s_i2cBusMutex = xSemaphoreCreateRecursiveMutex();
+#endif
   return s_i2cBusMutex;
 }
-
-namespace {
-class ScopedI2CBusLock {
-  bool _locked = false;
- public:
-  ScopedI2CBusLock() {
-    SemaphoreHandle_t m = getSharedI2cBusMutex();
-    if (m != nullptr) {
-      xSemaphoreTakeRecursive(m, portMAX_DELAY);
-      _locked = true;
-    }
-  }
-  ~ScopedI2CBusLock() {
-    if (_locked) {
-      SemaphoreHandle_t m = getSharedI2cBusMutex();
-      if (m != nullptr) {
-        xSemaphoreGiveRecursive(m);
-      }
-      _locked = false;
-    }
-  }
-};
-}  // namespace
 
 void InputManager::beginGt911() {
   const auto& t = BoardConfig::ACTIVE.touch;
@@ -2165,10 +2141,10 @@ void InputManager::pollGt911(const unsigned long now) {
     s_consecutiveFailures++;
     if (s_consecutiveFailures >= 5) {
       s_consecutiveFailures = 0;
+      ScopedI2CBusLock lock;
       const auto& t = BoardConfig::ACTIVE.touch;
       // 9 SCL bus-clear pulses followed by valid I2C STOP condition
       if (t.scl >= 0) {
-        ScopedI2CBusLock lock;
         pinMode(t.scl, OUTPUT);
         for (int i = 0; i < 9; ++i) {
           digitalWrite(t.scl, HIGH);
@@ -2192,7 +2168,6 @@ void InputManager::pollGt911(const unsigned long now) {
       }
       // Re-init Wire
       if (t.sda >= 0 && t.scl >= 0) {
-        ScopedI2CBusLock lock;
         Wire.begin(t.sda, t.scl, 400000);
         Wire.setTimeOut(10);
       }

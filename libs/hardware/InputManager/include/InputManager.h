@@ -447,9 +447,11 @@ class InputManager {
   // driver).
   static constexpr unsigned long TOUCH_IRQ_PULSE_MS = 120;   // release hold-over after last valid read
   static constexpr unsigned long TOUCH_SAMPLE_DELAY_MS = 8;  // I2C poll cadence
-  static constexpr int TOUCH_TAP_SLOP_PX = 28;
-  static constexpr int TOUCH_SWIPE_MIN_PX = 60;
-  static constexpr int TOUCH_TAP_RELEASE_SLOP_PX = TOUCH_SWIPE_MIN_PX - 1;
+  static constexpr int TOUCH_SWIPE_MIN_DISTANCE = 40;
+  static constexpr int TOUCH_TAP_MAX_MOVEMENT = 18;
+  static constexpr int TOUCH_TAP_SLOP_PX = TOUCH_TAP_MAX_MOVEMENT;
+  static constexpr int TOUCH_SWIPE_MIN_PX = TOUCH_SWIPE_MIN_DISTANCE;
+  static constexpr int TOUCH_TAP_RELEASE_SLOP_PX = TOUCH_TAP_MAX_MOVEMENT;
   static constexpr unsigned long TOUCH_SWIPE_MAX_MS = 700;
   static constexpr unsigned long TOUCH_MULTI_SWIPE_MAX_MS = 2000;
   static constexpr int TOUCH_MULTI_CONTACT_SEPARATION_SLOP_PX = 45;
