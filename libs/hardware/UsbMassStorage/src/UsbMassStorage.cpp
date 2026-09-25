@@ -13,6 +13,21 @@
 extern "C" bool tud_mounted(void);
 extern "C" bool tud_disconnect(void);
 
+// TinyUSB linker stubs: libarduino_tinyusb.a references these driver callbacks
+// across unused classes (HID, DFU, NCM). In selective-compilation builds that
+// only enable MSC, esp32-hal-tinyusb.c leaves them undefined. Provide weak
+// fallback definitions so the firmware links cleanly.
+extern "C" {
+__attribute__((weak)) const uint8_t* tud_hid_descriptor_report_cb(uint8_t /*itf*/) { return nullptr; }
+__attribute__((weak)) uint16_t tud_hid_get_report_cb(uint8_t /*itf*/, uint8_t /*report_id*/, int /*report_type*/, uint8_t* /*buffer*/, uint16_t /*reqlen*/) { return 0; }
+__attribute__((weak)) void tud_hid_set_report_cb(uint8_t /*itf*/, uint8_t /*report_id*/, int /*report_type*/, const uint8_t* /*buffer*/, uint16_t /*bufsize*/) {}
+__attribute__((weak)) void tud_dfu_runtime_reboot_to_dfu_cb(void) {}
+__attribute__((weak)) uint32_t tud_dfu_get_timeout_cb(uint8_t /*alt*/, uint8_t /*state*/) { return 0; }
+__attribute__((weak)) void tud_dfu_download_cb(uint8_t /*alt*/, uint16_t /*block_num*/, uint8_t const* /*data*/, uint16_t /*length*/) {}
+__attribute__((weak)) void tud_dfu_manifest_cb(uint8_t /*alt*/) {}
+__attribute__((weak)) bool tud_network_recv_cb(const uint8_t* /*src*/, uint16_t /*size*/) { return false; }
+}
+
 namespace freeink {
 namespace {
 
